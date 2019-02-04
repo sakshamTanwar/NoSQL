@@ -52,11 +52,40 @@ void MP2Node::updateRing() {
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
 
+	if(hasListChanged(curMemList)) {
+		change = true;
+		ring = curMemList;
+	}
+	
+
+
 
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+
+	if(ring.size() > 0 && change)
+		stabilizationProtocol();
+
+}
+
+/**
+ * FUNCTION NAME: hasListChanged
+ * 
+ * DESCRIPTION: This function checks if the list has changed
+ * */
+
+bool MP2Node::hasListChanged(vector<Node> newList) {
+	if(newList.size() != ring.size())
+		return true;
+
+	for(int i = 0; i<(int)newList.size(); i++) {
+		if(ring[i].getAddress()->getAddress() != newList[i].getAddress()->getAddress()) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**

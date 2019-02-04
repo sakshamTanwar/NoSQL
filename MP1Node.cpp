@@ -97,8 +97,6 @@ int MP1Node::initThisNode(Address *joinaddr) {
 	/*
 	 * This function is partially implemented and may require changes
 	 */
-	int id = *(int*)(&memberNode->addr.addr);
-	int port = *(short*)(&memberNode->addr.addr[4]);
 
 	memberNode->bFailed = false;
 	memberNode->inited = true;
@@ -163,6 +161,7 @@ int MP1Node::finishUpThisNode(){
    /*
     * Your code goes here
     */
+    return 1;
 }
 
 /**
@@ -246,9 +245,11 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 	 if(msg->msgType == JOINREQ) {
         mergeMemberList(msg->memberList);
         sendMessage(msg->addr, JOINREP);
+        return true;
 	 } else if(msg->msgType == JOINREP) {
         memberNode->inGroup = true;
         mergeMemberList(msg->memberList);
+        return true;
 	 }
      else if(msg->msgType == PING) {
          mergeMemberList(msg->memberList);
@@ -261,7 +262,10 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
                 break;
              }
          }
+         return true;
      }
+
+     return false;
 }
 
 /**
@@ -297,14 +301,7 @@ void MP1Node::nodeLoopOps() {
 
     memberNode->memberList = newList;
 
-    if(memberNode->addr.getAddress() == "1:0")
-    {
-        for(auto it : newList)
-        {
-            cout<<it.getid()<<" "<<it.getport()<<" "<<it.getheartbeat()<<" "<<it.gettimestamp()<<"\n";
-        }
-        cout<<"\n\n";
-    }
+
     
 
     srand(chrono::high_resolution_clock::now().time_since_epoch().count());

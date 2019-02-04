@@ -59,6 +59,7 @@ public:
 	vector<Node> getMembershipList();
 	size_t hashFunction(string key);
 	void findNeighbors();
+	bool hasListChanged(vector<Node> newList);
 
 	// client side CRUD APIs
 	void clientCreate(string key, string value);
