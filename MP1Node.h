@@ -20,6 +20,7 @@
  */
 #define TREMOVE 20
 #define TFAIL 5
+#define GSPREAD 10
 
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
@@ -31,7 +32,7 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
-    DUMMYLASTMSGTYPE
+    PING
 };
 
 /**
@@ -41,6 +42,8 @@ enum MsgTypes{
  */
 typedef struct MessageHdr {
 	enum MsgTypes msgType;
+	vector<MemberListEntry> memberList;
+	Address *addr;
 }MessageHdr;
 
 /**
@@ -74,7 +77,13 @@ public:
 	int isNullAddress(Address *addr);
 	Address getJoinAddress();
 	void initMemberListTable(Member *memberNode);
+	void sendMessage(Address *to, MsgTypes msgType);
 	void printAddress(Address *addr);
+	void mergeMemberList(vector<MemberListEntry> recTable);
+	bool checkFailed(MemberListEntry memEntry);
+	int getId(Address *addr);
+	short getPort(Address *addr);
+	Address getAddrFromId(int id, short port);
 	virtual ~MP1Node();
 };
 
