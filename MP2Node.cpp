@@ -584,6 +584,20 @@ void MP2Node::stabilizationProtocol() {
 	 * Implement this
 	 */
 
+	for(auto it : ht->hashTable) {
+		string key = it.first, value = it.second;
+
+		vector<Node> addr_vec = findNodes(key);
+
+		Message prMsg(-1, memberNode->addr, CREATE, key, value, PRIMARY);
+		Message seMsg(-1, memberNode->addr, CREATE, key, value, SECONDARY);
+		Message teMsg(-1, memberNode->addr, CREATE, key, value, TERTIARY);
+
+		sendMessage(addr_vec[0].getAddress(), prMsg);
+		sendMessage(addr_vec[1].getAddress(), seMsg);
+		sendMessage(addr_vec[2].getAddress(), teMsg);		
+	}
+
 	
 
 }
