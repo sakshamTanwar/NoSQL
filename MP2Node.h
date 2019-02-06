@@ -19,6 +19,8 @@
 #include "Message.h"
 #include "Queue.h"
 
+#define T_TIMEOUT 20
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -29,6 +31,25 @@
  * 				3) Server side CRUD APIs
  * 				4) Client side CRUD APIs
  */
+
+class transaction {
+	int id;
+	int quorumCount;
+
+public:
+
+	int time;
+	string key;
+	string value;
+
+	transaction(int id, string key, string value, int time);
+	transaction();
+	void increaseQuorum();
+	int getQuorum();
+
+};
+
+
 class MP2Node {
 private:
 	// Vector holding the next two neighbors in the ring who have my replicas
@@ -53,6 +74,13 @@ public:
 	Member * getMemberNode() {
 		return this->memberNode;
 	}
+
+	map<int, transaction> trans;
+
+	map<int, MessageType> transType;
+
+	// Get new transaction id
+	int getNewId(); 
 
 	// ring functionalities
 	void updateRing();
@@ -88,6 +116,16 @@ public:
 
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
+
+	void sendMessage(Address *toAddr, Message msg);
+
+	void createMessageHandler(Message msg);
+	void readMessageHandler(Message msg);
+	void updateMessageHandler(Message msg);
+	void deleteMessageHandler(Message msg);
+	void replyMessageHandler(Message msg);
+	void readReplyMessageHandler(Message msg);
+	void manageTransactions();
 
 	~MP2Node();
 };

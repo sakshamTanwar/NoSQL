@@ -5,6 +5,24 @@
  **********************************/
 #include "MP2Node.h"
 
+transaction::transaction(int id, string key, string value, int time) {
+	this->id = id;
+	this->key = key;
+	this->value = value;
+	this->quorumCount = 0;
+	this->time = time;
+}
+
+transaction::transaction() {}
+
+void transaction::increaseQuorum() {
+	this->quorumCount++;
+}
+
+int transaction::getQuorum() {
+	return this->quorumCount;
+}
+
 /**
  * constructor
  */
@@ -128,6 +146,83 @@ size_t MP2Node::hashFunction(string key) {
 }
 
 /**
+ * FUNCTION NAME: sendMessage
+ * 
+ * DESCRIPTION: Send Message to the given address
+ */
+void MP2Node::sendMessage(Address *toAddr, Message msg) {
+	emulNet->ENsend(&memberNode->addr, toAddr, msg.toString());
+}
+
+/**
+ * Message Handlers
+ */
+
+void MP2Node::createMessageHandler(Message msg) {
+	bool success = createKeyValue(msg.key, msg.value, msg.replica);
+	if(success) {
+		log->logCreateSuccess(&memberNode->addr, false, msg.transID, msg.key, msg.value);
+	}
+	else {
+		log->logCreateFail(&memberNode->addr, false, msg.transID, msg.key, msg.value);
+	}
+	Message repMes(msg.transID, memberNode->addr, REPLY, success);
+	sendMessage(&msg.fromAddr, repMes);
+}
+
+void MP2Node::readMessageHandler(Message msg) {
+	string _value = readKey(msg.key);
+	if(_value == "") {
+		log->logReadFail(&memberNode->addr, false, msg.transID, msg.key);
+		return;
+	}
+	log->logReadSuccess(&memberNode->addr, false, msg.transID, msg.key, _value);
+	Message repMes(msg.transID, memberNode->addr, READREPLY, _value);
+	repMes.value = _value;
+	sendMessage(&msg.fromAddr, repMes);
+}
+
+void MP2Node::updateMessageHandler(Message msg) {
+	bool success = updateKeyValue(msg.key, msg.value, msg.replica);
+	if(success) {
+		log->logUpdateSuccess(&memberNode->addr, false, msg.transID, msg.key, msg.value);
+	}
+	else {
+		log->logUpdateFail(&memberNode->addr, false, msg.transID, msg.key, msg.value);
+	}
+	Message repMes(msg.transID, memberNode->addr, REPLY, success);
+	sendMessage(&msg.fromAddr, repMes);
+}
+
+void MP2Node::deleteMessageHandler(Message msg) {
+	bool success = deletekey(msg.key);
+	if(success) {
+		log->logDeleteSuccess(&memberNode->addr, false, msg.transID, msg.key);
+	}
+	else {
+		log->logDeleteFail(&memberNode->addr, false, msg.transID, msg.key);
+	}
+	Message repMes(msg.transID, memberNode->addr, REPLY, success);
+	sendMessage(&msg.fromAddr, repMes);
+}
+
+void MP2Node::replyMessageHandler(Message msg) {
+	if(msg.success) {
+		if(trans.count(msg.transID) != 0) {
+			trans[msg.transID].increaseQuorum();
+		}
+	}
+}
+
+void MP2Node::readReplyMessageHandler(Message msg) {
+	if(trans.count(msg.transID) != 0) {
+		trans[msg.transID].increaseQuorum();
+		trans[msg.transID].value = msg.value;
+	}
+}
+
+
+/**
  * FUNCTION NAME: clientCreate
  *
  * DESCRIPTION: client side CREATE API
@@ -140,6 +235,19 @@ void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
 	 */
+
+	vector<Node> addr_vec = findNodes(key);
+	int id = g_transID++;
+	transType[id] = CREATE;
+	trans[id] = transaction(id, key, value, par->getcurrtime());
+	Message prMsg(id, memberNode->addr, CREATE, key, value, PRIMARY);
+	Message seMsg(id, memberNode->addr, CREATE, key, value, SECONDARY);
+	Message teMsg(id, memberNode->addr, CREATE, key, value, TERTIARY);
+	
+	sendMessage(addr_vec[0].getAddress(), prMsg);
+	sendMessage(addr_vec[1].getAddress(), seMsg);
+	sendMessage(addr_vec[2].getAddress(), teMsg);
+
 }
 
 /**
@@ -155,6 +263,16 @@ void MP2Node::clientRead(string key){
 	/*
 	 * Implement this
 	 */
+
+	vector<Node> addr_vec = findNodes(key);
+	int id = g_transID++;
+	transType[id] = READ;
+	trans[id] = transaction(id, key, "", par->getcurrtime());
+	Message msg(id, memberNode->addr, READ, key);
+	for(auto it : addr_vec) {
+		sendMessage(it.getAddress(), msg);
+	}
+
 }
 
 /**
@@ -170,6 +288,19 @@ void MP2Node::clientUpdate(string key, string value){
 	/*
 	 * Implement this
 	 */
+
+	vector<Node> addr_vec = findNodes(key);
+	int id = g_transID++;
+	transType[id] = UPDATE;
+	trans[id] = transaction(id, key, value, par->getcurrtime());
+	Message prMsg(id, memberNode->addr, UPDATE, key, value, PRIMARY);
+	Message seMsg(id, memberNode->addr, UPDATE, key, value, SECONDARY);
+	Message teMsg(id, memberNode->addr, UPDATE, key, value, TERTIARY);
+	
+	sendMessage(addr_vec[0].getAddress(), prMsg);
+	sendMessage(addr_vec[1].getAddress(), seMsg);
+	sendMessage(addr_vec[2].getAddress(), teMsg);	
+
 }
 
 /**
@@ -185,6 +316,16 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
+
+	vector<Node> addr_vec = findNodes(key);
+	int id = g_transID++;
+	transType[id] = DELETE;
+	trans[id] = transaction(id, key, "", par->getcurrtime());
+	Message msg(id, memberNode->addr, DELETE, key);
+	for(auto it : addr_vec) {
+		sendMessage(it.getAddress(), msg);
+	}
+
 }
 
 /**
@@ -200,6 +341,12 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Insert key, value, replicaType into the hash table
+
+	if(ht->count(key) > 0) {
+		return false;
+	}
+
+	return ht->create(key, value);
 }
 
 /**
@@ -215,6 +362,7 @@ string MP2Node::readKey(string key) {
 	 * Implement this
 	 */
 	// Read key from local hash table and return value
+	return ht->read(key);
 }
 
 /**
@@ -230,6 +378,10 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Update key in local hash table and return true or false
+	if(ht->count(key) != 1) {
+		return false;
+	}
+	return ht->update(key, value);
 }
 
 /**
@@ -245,6 +397,12 @@ bool MP2Node::deletekey(string key) {
 	 * Implement this
 	 */
 	// Delete the key from the local hash table
+	if(ht->count(key) != 1) {
+		return false;
+	}
+
+	return ht->deleteKey(key);
+
 }
 
 /**
@@ -280,6 +438,28 @@ void MP2Node::checkMessages() {
 		/*
 		 * Handle the message types here
 		 */
+		
+
+		Message msg(message);
+		if(msg.type == CREATE) {
+			createMessageHandler(msg);
+		}
+		else if(msg.type == READ) {
+			readMessageHandler(msg);
+		}
+		else if(msg.type == UPDATE) {
+			updateMessageHandler(msg);
+		}
+		else if(msg.type == DELETE) {
+			deleteMessageHandler(msg);
+		}
+		else if(msg.type == REPLY) {
+			replyMessageHandler(msg);
+			// cout<<message<<"\n";
+		}
+		else if(msg.type == READREPLY) {
+			readReplyMessageHandler(msg);
+		}
 
 	}
 
@@ -287,6 +467,52 @@ void MP2Node::checkMessages() {
 	 * This function should also ensure all READ and UPDATE operation
 	 * get QUORUM replies
 	 */
+
+	manageTransactions();
+}
+
+void MP2Node::manageTransactions() {
+	for(auto it : trans) {
+		int id = it.first;
+		transaction t = it.second;
+
+		if(t.getQuorum() >= 2) {
+			MessageType type = transType[id];
+			if(type == CREATE) {
+				log->logCreateSuccess(&memberNode->addr, true, id, t.key, t.value);
+			}
+			else if(type == READ) {
+				log->logReadSuccess(&memberNode->addr, true, id, t.key, t.value);
+			}
+			else if(type == UPDATE) {
+				log->logUpdateSuccess(&memberNode->addr, true, id, t.key, t.value);
+			}
+			else if(type == DELETE) {
+				log->logDeleteSuccess(&memberNode->addr, true, id, t.key);
+			}
+
+			trans.erase(id);
+
+		}
+		else if(par->getcurrtime() - t.time > T_TIMEOUT) {
+			MessageType type = transType[id];
+			if(type == CREATE) {
+				log->logCreateFail(&memberNode->addr, true, id, t.key, t.value);
+			}
+			else if(type == READ) {
+				log->logReadFail(&memberNode->addr, true, id, t.key);
+			}
+			else if(type == UPDATE) {
+				log->logUpdateFail(&memberNode->addr, true, id, t.key, t.value);
+			}
+			else if(type == DELETE) {
+				log->logDeleteFail(&memberNode->addr, true, id, t.key);
+			}
+
+			trans.erase(id);
+		}
+
+	}
 }
 
 /**
@@ -357,4 +583,7 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
+
+	
+
 }
